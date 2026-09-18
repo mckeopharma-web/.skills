@@ -98,11 +98,13 @@ def main() -> int:
     research_gap_count = 0
     assessment_count = 0
 
-    def register(identifier, kind):
+    def register(identifier, kind, repeated_reference=False):
         if not identifier:
             errors.append(f"missing {kind} id")
             return
         if identifier in all_ids:
+            if repeated_reference and all_ids[identifier] == kind:
+                return
             errors.append(f"duplicate id {identifier} ({kind}; already {all_ids[identifier]})")
         else:
             all_ids[identifier] = kind
@@ -113,6 +115,8 @@ def main() -> int:
             continue
         module_id = module.get("id")
         register(module_id, "module")
+        if not module.get("title"):
+            errors.append(f"{module_id} missing title")
         allocated = as_number(module.get("allocated_hours"), f"{module_id}.allocated_hours", errors)
         units = module.get("units")
         if not isinstance(units, list) or not units:
@@ -127,10 +131,16 @@ def main() -> int:
                 continue
             unit_id = unit.get("id")
             register(unit_id, "unit")
+            if not unit.get("title"):
+                errors.append(f"{unit_id} missing title")
             if unit_id:
                 unit_ids.add(unit_id)
                 unit_by_id[unit_id] = unit
             duration = as_number(unit.get("duration_hours"), f"{unit_id}.duration_hours", errors)
+            if "source_duration_hours" not in unit:
+                errors.append(f"{unit_id} must retain source_duration_hours separately")
+            if not unit.get("duration_basis"):
+                errors.append(f"{unit_id} missing duration_basis")
             if duration is not None:
                 if duration <= 0:
                     errors.append(f"{unit_id} duration_hours must be positive")
@@ -143,11 +153,15 @@ def main() -> int:
                 else:
                     target_set.update(values)
                     for value in values:
-                        register(value, field[:-4])
+                        register(value, field[:-4], repeated_reference=True)
             assessment_status = unit.get("assessment_status")
             if assessment_status not in ALLOWED_ASSESSMENT:
                 errors.append(f"{unit_id}.assessment_status is invalid")
             else:
+                if assessment_status == "exempt" and not (
+                    unit.get("not_applicable_reason") or unit.get("assessment_exemption_reason")
+                ):
+                    errors.append(f"{unit_id} assessment exemption needs a reason")
                 assessment_count += int(assessment_status == "defined")
             provenance_status = unit.get("provenance_status")
             if provenance_status not in ALLOWED_PROVENANCE:
@@ -204,7 +218,7 @@ def main() -> int:
             if profile.get("canonical_sheet") != program.get("canonical_sheet"):
                 errors.append("profile canonical_sheet disagrees with manifest")
             if profile.get("unit_count") and profile["unit_count"] > len(unit_by_id):
-                warnings.append("profile contains more source units than the normalized manifest")
+                errors.append("normalized manifest drops source unit candidates")
             if source is not None and profile.get("source_populated_hours") is not None:
                 if not close(source, profile["source_populated_hours"]):
                     errors.append("profile source_populated_hours disagrees with manifest")
