@@ -1,0 +1,3 @@
+interface:
+  display_name: "Workbook Structure Gate"
+  short_description: "Fail-closed validation for curriculum workbook structure and hours"

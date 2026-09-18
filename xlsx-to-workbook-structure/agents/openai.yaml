@@ -1,0 +1,3 @@
+interface:
+  display_name: "XLSX to Workbook Structure"
+  short_description: "Preserve curriculum XLSX structure while building stable workbook projections"
